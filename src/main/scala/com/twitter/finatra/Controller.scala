@@ -23,7 +23,7 @@ import com.twitter.app.App
 
 class Controller extends App with Logging with Stats {
 
-  val routes = new RouteVector[(HttpMethod, PathPattern, Request => Future[ResponseBuilder])]
+  val routes = new RouteVector[(HttpMethod, String, PathPattern, Request => Future[ResponseBuilder])]
 
   var notFoundHandler:  Option[(Request) => Future[ResponseBuilder]]  = None
   var errorHandler:     Option[(Request) => Future[ResponseBuilder]]  = None
@@ -46,8 +46,8 @@ class Controller extends App with Logging with Stats {
 
   val stats = statsReceiver.scope("Controller")
 
-  def render: ResponseBuilder  = new ResponseBuilder
-  def route:  Router    = new Router(this)
+  def render: ResponseBuilder = new ResponseBuilder
+  def route: Router = new Router(this)
 
   def redirect(location: String, message: String = "", permanent: Boolean = false): ResponseBuilder = {
     val msg = if (message == "")
@@ -85,7 +85,7 @@ class Controller extends App with Logging with Stats {
 
   def addRoute(method: HttpMethod, path: String)(callback: Request => Future[ResponseBuilder]) {
     val regex = SinatraPathPatternParser(path)
-    routes.add((method, regex, (r) => {
+    routes.add((method, path, regex, (r) => {
       stats.timeFuture("%s/Root/%s".format(method.toString, path.stripPrefix("/"))) {
         callback(r)
       }
