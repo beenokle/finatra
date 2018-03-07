@@ -1,6 +1,5 @@
 package com.twitter.finatra
 
-import com.google.common.base.Objects
 import com.twitter.finagle.{Service, SimpleFilter}
 import org.jboss.netty.handler.codec.http.HttpResponseStatus._
 import org.jboss.netty.buffer.ChannelBuffers.copiedBuffer

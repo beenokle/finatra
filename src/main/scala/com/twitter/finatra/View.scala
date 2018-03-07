@@ -58,8 +58,8 @@ class FinatraMustacheFactory(baseTemplatePath:String) extends DefaultMustacheFac
    * Invalidate template caches during development
    */
   def invalidateMustacheCaches() : Unit = {
-    mustacheCache.invalidateAll()
-    templateCache.invalidateAll()
+    mustacheCache.clear()
+    templateCache.clear()
   }
 
 }
@@ -69,7 +69,7 @@ object View {
   def templatePath          = baseTemplatePath
   lazy val mustacheFactory  = new FinatraMustacheFactory(baseTemplatePath)
 
-  mustacheFactory.setObjectHandler(new TwitterObjectHandler)
+  mustacheFactory.setObjectHandler(new ScalaObjectHandler)
   mustacheFactory.setExecutorService(Executors.newCachedThreadPool)
 
   private def combinePaths(path1: String, path2: String): String = {

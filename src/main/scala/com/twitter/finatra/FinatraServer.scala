@@ -15,17 +15,15 @@
  */
 package com.twitter.finatra
 
-import com.twitter.finagle.http.{Request => FinagleRequest, Response => FinagleResponse, HttpMuxer}
+import com.twitter.finagle.builder.ServerBuilder
+import com.twitter.finagle.http.{Request => FinagleRequest, Response => FinagleResponse, Http, RichHttp, HttpMuxer}
+import com.twitter.finagle.{Http => HttpServer}
 import com.twitter.finagle._
 import java.lang.management.ManagementFactory
-import com.twitter.util.{Future, Await}
+import com.twitter.util.Await
 import org.jboss.netty.handler.codec.http.{HttpResponse, HttpRequest}
-import com.twitter.finagle.netty3.{Netty3ListenerTLSConfig, Netty3Listener}
-import java.net.SocketAddress
+import java.net.InetSocketAddress
 import com.twitter.conversions.storage._
-import com.twitter.finagle.server.DefaultServer
-import com.twitter.finagle.dispatch.SerialServerDispatcher
-import com.twitter.finagle.ssl.Ssl
 import java.io.{FileOutputStream, File, FileNotFoundException}
 
 class FinatraServer extends FinatraTwitterServer {
@@ -59,7 +57,7 @@ class FinatraServer extends FinatraTwitterServer {
       service(FinagleRequest(req)) map { _.httpResponse }
     }
 
-  private[this] lazy val service = {
+  private[this] lazy val service: Service[FinagleRequest, FinagleResponse] = {
     val appService  = new AppService(controllers)
     val fileService = new FileService
     val loggingFilter = new LoggingFilter
@@ -67,15 +65,18 @@ class FinatraServer extends FinatraTwitterServer {
     addFilter(loggingFilter)
     addFilter(fileService)
 
-    nettyToFinagle andThen allFilters(appService)
+    //allFilters(appService) andThen nettyToFinagle
+    //nettyToFinagle andThen allFilters(appService)
+    allFilters(appService)
   }
 
-  private[this] lazy val codec = {
+  private[this] lazy val codec: Http = {
     http.Http()
       .maxRequestSize(config.maxRequestSize().megabyte)
+      .maxInitialLineLength(256.kilobytes)
+      .maxHeaderSize(256.kilobytes)
+      .maxResponseSize(10.megabytes)
       .enableTracing(true)
-      .server(ServerCodecConfig("httpserver", new SocketAddress{}))
-      .pipelineFactory
   }
 
   def writePidFile() {
@@ -91,28 +92,33 @@ class FinatraServer extends FinatraTwitterServer {
   }
 
   def startSecureServer() {
-    val tlsConfig =
-      Some(Netty3ListenerTLSConfig(() => Ssl.server(config.certificatePath(), config.keyPath(), null, null, null)))
-    object HttpsListener extends Netty3Listener[HttpResponse, HttpRequest]("https", codec, tlsConfig = tlsConfig)
-    object HttpsServer extends DefaultServer[HttpRequest, HttpResponse, HttpResponse, HttpRequest](
-      "https", HttpsListener, new SerialServerDispatcher(_, _)
-    )
-    log.info("https server started on port: " + config.sslPort())
-    secureServer = Some(HttpsServer.serve(config.sslPort(), service))
+    val serverBuilder = ServerBuilder()
+      .codec(createCodec)
+      .bindTo(new InetSocketAddress(config.sslPort().toLong.toInt))
+      .name("https")
+      .tls(config.certificatePath(), config.keyPath())
+    secureServer = Some(serverBuilder.build(service))
+    log.info("http server started on port: " + config.sslPort)
+  }
+
+  protected def createCodec: RichHttp[Request] = {
+    new RichHttp[Request](
+      httpFactory = codec,
+      aggregateChunks = true)
   }
 
   def startHttpServer() {
-    object HttpListener extends Netty3Listener[HttpResponse, HttpRequest]("http", codec)
-    object HttpServer extends DefaultServer[HttpRequest, HttpResponse, HttpResponse, HttpRequest](
-      "http", HttpListener, new SerialServerDispatcher(_, _)
-    )
+    val serverBuilder = ServerBuilder()
+      .codec(createCodec)
+      .bindTo(new InetSocketAddress(config.port().toLong.toInt))
+      .name("http")
+    server = Some(serverBuilder.build(service))
     log.info("http server started on port: " + config.port())
-    server = Some(HttpServer.serve(config.port(), service))
   }
 
   def startAdminServer() {
+    adminServer = Some(HttpServer.serve(new InetSocketAddress("0.0.0.0", config.adminPort().toLong.toInt), HttpMuxer))
     log.info("admin http server started on port: " + config.adminPort())
-    adminServer = Some(HttpServer.serve(config.adminPort(), HttpMuxer))
   }
 
   def stop() {

@@ -242,6 +242,7 @@ trait CommonStatuses { self: ResponseBuilder =>
   def internalServerError: ResponseBuilder = buildFromStatus(Status.InternalServerError)
   def notImplemented:      ResponseBuilder = buildFromStatus(Status.NotImplemented)
   def serviceUnavailable:  ResponseBuilder = buildFromStatus(Status.ServiceUnavailable)
+  def expectationFailed:   ResponseBuilder = buildFromStatus(Status.ExpectationFailed)
 
   private def buildFromStatus(st: HttpResponseStatus): ResponseBuilder  = {
     status(st.getCode)
